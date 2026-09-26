@@ -4,6 +4,7 @@ import {
   getSettings,
   mediaAction,
   setTabMuted,
+  siteOf,
   siteRuleFor,
   togglePlay,
 } from './lib/media.js';
@@ -32,6 +33,21 @@ async function applySiteRulesToAll() {
   const [{ mutedSites }, tabs] = await Promise.all([getSettings(), chrome.tabs.query({})]);
   await Promise.all(tabs.map((t) => applySiteRule(t, mutedSites)));
 }
+
+// ---- Remembered site volumes ----
+
+// The content script reports new media starting in a frame; set it to the saved volume.
+async function applySiteVolume(tab, frameId) {
+  const site = siteOf(tab.url);
+  if (!site) return;
+  const { siteVolumes } = await getSettings();
+  const volume = siteVolumes[site];
+  if (volume != null) await mediaAction(tab.id, 'volume', volume, [frameId]);
+}
+
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message?.type === 'media-started' && sender.tab) applySiteVolume(sender.tab, sender.frameId);
+});
 
 // ---- Last tab that played sound (target of the play/pause shortcut) ----
 

@@ -25,9 +25,13 @@ const ICON = {
   micOff: svg('<path d="m2 2 20 20"/><path d="M9 9v3a3 3 0 0 0 5.1 2.1"/><path d="M15 9.3V5a3 3 0 0 0-5.7-1.3"/><path d="M19 10v2a7 7 0 0 1-.9 3.4"/><path d="M5 10v2a7 7 0 0 0 11.8 5.1"/><path d="M12 19v3"/>'),
   cam: svg('<path d="m22 8-6 4 6 4V8z"/><rect x="2" y="6" width="14" height="12" rx="2"/>'),
   camOff: svg('<path d="m2 2 20 20"/><path d="M16 16v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h2"/><path d="M9.7 6H15a1 1 0 0 1 1 1v3.3l1 1 5-3.3v8"/>'),
+  dots: svg('<circle cx="5" cy="12" r="1.8" stroke="none"/><circle cx="12" cy="12" r="1.8" stroke="none"/><circle cx="19" cy="12" r="1.8" stroke="none"/>', true),
+  check: svg('<path d="M20 6 9 17l-5-5"/>'),
+  close: svg('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
+  saved: svg('<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>'),
 };
 
-const RATES = [1, 1.25, 1.5, 2, 0.75];
+const RATES = [0.75, 1, 1.25, 1.5, 2];
 const MAX_BOOST = 300; // percent
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -39,8 +43,11 @@ const ui = {
   emptyTitle: $('#emptyTitle'),
   emptyText: $('#emptyText'),
   muteAll: $('#muteAll'),
+  menu: $('#menu'),
   showAll: $('#showAll'),
   siteList: $('#siteList'),
+  volumeList: $('#volumeList'),
+  volumeCount: $('#volumeCount'),
   siteCount: $('#siteCount'),
   addSite: $('#addSite'),
   keyList: $('#keyList'),
@@ -131,6 +138,8 @@ async function refreshTab(tabId) {
 
 const hasMedia = (t) => media.get(t.id)?.count > 0;
 const isMuted = (t) => !!t.mutedInfo?.muted;
+// Tabs that get a full row with controls; the rest are listed compactly under "Other tabs".
+const isMediaTab = (t) => t.audible || hasMedia(t);
 
 // Every word of the query must appear in the tab's title or URL.
 const matchesQuery = (t) => {
@@ -187,7 +196,10 @@ function render() {
   if (signature === lastSignature) return;
   lastSignature = signature;
 
-  ui.list.replaceChildren(...shown.map(renderTab));
+  const focus = captureFocus();
+  renderList(shown);
+  restoreFocus(focus);
+
   ui.empty.hidden = shown.length > 0 || !scanned;
   ui.emptyTitle.textContent = query ? 'No matching tabs' : 'Nothing is playing';
   ui.emptyText.textContent = query
@@ -204,6 +216,26 @@ function render() {
   renderSettings();
 }
 
+function renderList(shown) {
+  const mediaTabs = shown.filter(isMediaTab);
+  const otherTabs = shown.filter((t) => !isMediaTab(t));
+  // Headings only help when there is something to tell apart.
+  const both = mediaTabs.length > 0 && otherTabs.length > 0;
+  const heading = (text) => {
+    const li = document.createElement('li');
+    li.className = 'group';
+    li.setAttribute('role', 'presentation');
+    li.textContent = text;
+    return li;
+  };
+  ui.list.replaceChildren(
+    ...(both ? [heading('Media')] : []),
+    ...mediaTabs.map(renderTab),
+    ...(both ? [heading(`Other tabs · ${otherTabs.length}`)] : []),
+    ...otherTabs.map(renderTab),
+  );
+}
+
 function renderTab(t) {
   const node = ui.tpl.content.firstElementChild.cloneNode(true);
   const m = media.get(t.id);
@@ -211,35 +243,42 @@ function renderTab(t) {
   const site = siteOf(t.url);
   const isMeet = site === 'meet.google.com';
   const withMedia = m?.count > 0;
-  const btn = (act) => $(`[data-act="${act}"]`, node);
+  const compact = !isMediaTab(t);
+  const btn = (name) => $(`[data-act="${name}"]`, node);
 
+  node.dataset.tabId = t.id;
+  node.classList.toggle('compact', compact);
   node.classList.toggle('active', t.id === activeTabId);
   node.classList.toggle('sounding', !!t.audible && !muted);
 
   $('.fav', node).src = favicon(t.url);
   $('.title', node).textContent = t.title || t.url;
-  $('.meta', node).textContent = [site ?? 'Browser page', statusOf(t)].filter(Boolean).join(' · ');
-  $('.open', node).addEventListener('click', () => goTo(t));
+  $('.status', node).textContent = [site ?? 'Browser page', statusOf(t)].filter(Boolean).join(' · ');
+  const open = $('.open', node);
+  open.title = compact ? `Go to tab · ${site ?? t.url}` : 'Go to tab';
+  open.addEventListener('click', () => goTo(t));
 
-  // Transport controls (not for Meet, where "pausing" would cut the call audio).
-  const transport = withMedia && !isMeet;
-  for (const act of ['back', 'play', 'fwd']) btn(act).hidden = !transport;
-  btn('back').innerHTML = ICON.back;
-  btn('fwd').innerHTML = ICON.fwd;
-  btn('back').addEventListener('click', act(t, () => mediaAction(t.id, 'seek', -10)));
-  btn('fwd').addEventListener('click', act(t, () => mediaAction(t.id, 'seek', 10)));
-
+  // Play/pause (not for Meet, where "pausing" would cut the call audio).
   const play = btn('play');
+  play.hidden = !withMedia || isMeet;
   play.innerHTML = m?.playing ? ICON.pause : ICON.play;
-  play.title = m?.playing ? 'Pause' : 'Play';
+  play.title = m?.playing ? 'Pause (Space)' : 'Play (Space)';
   play.addEventListener('click', act(t, () => togglePlay(t.id)));
 
   const mute = btn('mute');
   mute.innerHTML = muted ? ICON.muted : ICON.sound;
-  mute.title = muted ? 'Unmute tab' : 'Mute tab';
+  mute.title = muted
+    ? reasons[t.id] === 'rule'
+      ? 'Unmute tab (M) · this site is always muted'
+      : 'Unmute tab (M)'
+    : 'Mute tab (M)';
   mute.classList.toggle('on', muted);
   mute.setAttribute('aria-pressed', String(muted));
   mute.addEventListener('click', act(t, () => setTabMuted(t.id, !muted)));
+
+  const menuBtn = btn('menu');
+  menuBtn.innerHTML = ICON.dots;
+  menuBtn.addEventListener('click', () => toggleMenu(t, menuBtn));
 
   // Volume
   const vol = $('.vol', node);
@@ -265,53 +304,60 @@ function renderTab(t) {
       m.volume = v / 100;
       apply(v);
     });
-  }
+    // Remember the level for the site once the slider is released.
+    if (site) range.addEventListener('change', () => saveSiteVolume(site, Number(range.value) / 100));
 
-  // Playback speed
-  const rate = btn('rate');
-  rate.hidden = !transport;
-  rate.textContent = `${m?.rate ?? 1}×`;
-  rate.addEventListener(
-    'click',
-    act(t, () => {
-      const next = RATES[(RATES.indexOf(m.rate) + 1) % RATES.length];
-      return mediaAction(t.id, 'rate', next);
-    }),
-  );
+    const savedMark = $('.saved', vol);
+    const saved = site ? settings.siteVolumes[site] : undefined;
+    savedMark.hidden = saved == null;
+    savedMark.innerHTML = ICON.saved;
+    savedMark.title = `Remembered for ${site}. Forget it from the ⋯ menu.`;
+  }
 
   // Google Meet mic / camera
   for (const kind of ['mic', 'cam']) {
-    const chip = btn(`meet-${kind}`);
+    const button = btn(`meet-${kind}`);
     const state = m?.meet?.[kind];
-    chip.hidden = !state;
+    button.hidden = !state;
     if (!state) continue;
     const off = state === 'off';
-    const label = kind === 'mic' ? 'Mic' : 'Camera';
-    chip.innerHTML = `${ICON[kind + (off ? 'Off' : '')]}${label} ${off ? 'off' : 'on'}`;
-    chip.classList.toggle('off', off);
-    chip.title = `Turn ${label.toLowerCase()} ${off ? 'on' : 'off'} in Meet`;
-    chip.addEventListener('click', act(t, () => mediaAction(t.id, `meet-${kind}`), 350));
+    const label = kind === 'mic' ? 'microphone' : 'camera';
+    button.innerHTML = ICON[kind + (off ? 'Off' : '')];
+    button.classList.toggle('on', off);
+    button.setAttribute('aria-pressed', String(off));
+    button.title = `${off ? 'Turn on' : 'Turn off'} ${label} in Meet`;
+    button.addEventListener('click', act(t, () => mediaAction(t.id, `meet-${kind}`), 350));
   }
 
-  // Always mute this site
-  const rule = btn('rule');
-  const matched = site && siteRuleFor(t.url, settings.mutedSites);
-  rule.hidden = !site;
-  rule.textContent = matched ? `Always muted ✓` : 'Always mute site';
-  rule.title = matched ? `Stop auto-muting ${matched}` : `Mute ${site} in every tab, now and later`;
-  rule.setAttribute('aria-pressed', String(!!matched));
-  rule.addEventListener('click', () =>
-    setMutedSites(
-      matched ? settings.mutedSites.filter((s) => s !== matched) : [site, ...settings.mutedSites],
-    ),
-  );
-
-  $('.more', node).hidden = [...$('.more', node).children].every((c) => c.hidden);
+  const more = $('.more', node);
+  more.hidden = compact || [...more.children].every((c) => c.hidden);
   return node;
+}
+
+// Re-rendering replaces the rows; put keyboard focus back on the same control.
+function captureFocus() {
+  const el = document.activeElement;
+  const row = el?.closest?.('.tab');
+  if (!row || !ui.list.contains(row)) return null;
+  const control = el.classList.contains('open') ? 'open' : el.type === 'range' ? 'range' : el.dataset.act;
+  return { tabId: row.dataset.tabId, control };
+}
+
+function restoreFocus(focus) {
+  if (!focus) return;
+  const row = ui.list.querySelector(`.tab[data-tab-id="${focus.tabId}"]`);
+  if (!row) return;
+  const selector =
+    focus.control === 'open' ? '.open' : focus.control === 'range' ? 'input[type=range]' : `[data-act="${focus.control}"]`;
+  const target = $(selector, row);
+  (target && !target.closest('[hidden]') ? target : $('.open', row)).focus({ preventScroll: true });
 }
 
 function renderSettings() {
   ui.showAll.checked = settings.showAll;
+  for (const radio of document.querySelectorAll('input[name="theme"]')) {
+    radio.checked = radio.value === settings.theme;
+  }
 
   const sites = settings.mutedSites;
   ui.siteCount.textContent = sites.length ? `(${sites.length})` : '';
@@ -330,6 +376,28 @@ function renderSettings() {
           return li;
         })
       : [Object.assign(document.createElement('li'), { className: 'hint', textContent: 'No sites yet.' })]),
+  );
+
+  const volumes = Object.entries(settings.siteVolumes).sort(([a], [b]) => a.localeCompare(b));
+  ui.volumeCount.textContent = volumes.length ? `(${volumes.length})` : '';
+  ui.volumeList.replaceChildren(
+    ...(volumes.length
+      ? volumes.map(([s, v]) => {
+          const li = document.createElement('li');
+          const name = document.createElement('span');
+          name.textContent = s;
+          const level = document.createElement('span');
+          level.className = 'level';
+          level.textContent = `${Math.round(v * 100)}%`;
+          const remove = document.createElement('button');
+          remove.className = 'remove';
+          remove.textContent = 'Remove';
+          remove.title = `Forget the volume for ${s}`;
+          remove.addEventListener('click', () => saveSiteVolume(s, 1));
+          li.append(name, level, remove);
+          return li;
+        })
+      : [Object.assign(document.createElement('li'), { className: 'hint', textContent: 'None yet.' })]),
   );
 }
 
@@ -351,17 +419,162 @@ async function renderShortcuts() {
   );
 }
 
+// ---- Row menu (⋯) ----
+
+let menuTabId = null;
+let menuClosedAt = 0;
+
+function toggleMenu(t, anchor) {
+  // Clicking ⋯ while its menu is open: light dismiss already closed it on pointerdown.
+  if (menuTabId === t.id && Date.now() - menuClosedAt < 300) return;
+  openMenu(t, anchor);
+}
+
+function openMenu(t, anchor) {
+  const m = media.get(t.id);
+  const site = siteOf(t.url);
+  const transport = m?.count > 0 && site !== 'meet.google.com';
+  const saved = site ? settings.siteVolumes[site] : undefined;
+  const rule = site ? siteRuleFor(t.url, settings.mutedSites) : null;
+
+  const close = () => ui.menu.hidePopover();
+  const label = (text) => Object.assign(document.createElement('div'), { className: 'menu-label', textContent: text });
+  const separator = () => Object.assign(document.createElement('div'), { className: 'menu-sep' });
+
+  const item = (icon, text, run, { danger = false, checked, hint } = {}) => {
+    const b = document.createElement('button');
+    b.className = 'menu-item' + (danger ? ' danger' : '');
+    b.setAttribute('role', checked === undefined ? 'menuitem' : 'menuitemcheckbox');
+    if (checked !== undefined) b.setAttribute('aria-checked', String(checked));
+    b.innerHTML = `${icon}<span></span>${checked ? `<span class="check">${ICON.check}</span>` : ''}`;
+    b.querySelector('span').textContent = text;
+    if (hint) b.append(Object.assign(document.createElement('span'), { className: 'menu-hint', textContent: hint }));
+    b.addEventListener('click', () => {
+      close();
+      runOn(t, run);
+    });
+    return b;
+  };
+
+  // A row of small buttons; `keepOpen` lets you press them repeatedly (skipping).
+  const segmented = (buttons, { keepOpen = false, radio = false } = {}) => {
+    const row = document.createElement('div');
+    row.className = 'segmented';
+    for (const { html, title, run, checked } of buttons) {
+      const b = document.createElement('button');
+      b.innerHTML = html;
+      b.title = title;
+      b.setAttribute('role', radio ? 'menuitemradio' : 'menuitem');
+      if (radio) b.setAttribute('aria-checked', String(!!checked));
+      b.addEventListener('click', () => {
+        if (!keepOpen) close();
+        runOn(t, run);
+      });
+      row.append(b);
+    }
+    return row;
+  };
+
+  const parts = [];
+  if (transport) {
+    parts.push(
+      label('Skip'),
+      segmented(
+        [
+          { html: `${ICON.back}10s`, title: 'Back 10 seconds', run: () => mediaAction(t.id, 'seek', -10) },
+          { html: `${ICON.fwd}10s`, title: 'Forward 10 seconds', run: () => mediaAction(t.id, 'seek', 10) },
+        ],
+        { keepOpen: true },
+      ),
+      label('Speed'),
+      segmented(
+        RATES.map((r) => ({
+          html: `${r}×`,
+          title: `Play at ${r}× speed`,
+          checked: r === m.rate,
+          run: () => mediaAction(t.id, 'rate', r),
+        })),
+        { radio: true },
+      ),
+      separator(),
+    );
+  }
+  if (site) {
+    parts.push(
+      item(ICON.muted, rule ? `Always muted (${rule})` : `Always mute ${site}`, () =>
+        setMutedSites(rule ? settings.mutedSites.filter((s) => s !== rule) : [site, ...settings.mutedSites]),
+      { checked: !!rule }),
+    );
+  }
+  if (saved != null) {
+    parts.push(
+      item(
+        ICON.back,
+        'Forget saved volume',
+        async () => {
+          await saveSiteVolume(site, 1);
+          await mediaAction(t.id, 'volume', 1);
+        },
+        { hint: `${Math.round(saved * 100)}%` },
+      ),
+    );
+  }
+  if (site || saved != null) parts.push(separator());
+  parts.push(item(ICON.close, 'Close tab', () => chrome.tabs.remove(t.id), { danger: true }));
+
+  ui.menu.replaceChildren(...parts);
+  menuTabId = t.id;
+  ui.menu.showPopover();
+
+  // Below the ⋯ button, right-aligned; flip above when there's no room.
+  const r = anchor.getBoundingClientRect();
+  const { offsetWidth: w, offsetHeight: h } = ui.menu;
+  let top = r.bottom + 4;
+  if (top + h > innerHeight - 8) top = Math.max(8, r.top - h - 4);
+  ui.menu.style.top = `${top}px`;
+  ui.menu.style.left = `${Math.min(Math.max(8, r.right - w), innerWidth - w - 8)}px`;
+  ui.menu.querySelector('button')?.focus();
+}
+
+ui.menu.addEventListener('toggle', (e) => {
+  if (e.newState !== 'closed') return;
+  menuClosedAt = Date.now();
+  // Closed from the keyboard (or by an action): return focus to the row's ⋯ button.
+  if (document.activeElement === document.body || ui.menu.contains(document.activeElement)) {
+    ui.list.querySelector(`.tab[data-tab-id="${menuTabId}"] [data-act="menu"]`)?.focus();
+  }
+});
+
+ui.menu.addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  e.preventDefault();
+  const items = [...ui.menu.querySelectorAll('button')];
+  const i = items.indexOf(document.activeElement);
+  const next = e.key === 'ArrowDown' ? (i + 1) % items.length : (i - 1 + items.length) % items.length;
+  items[next].focus();
+});
+
 // ---- Actions ----
 
-// Wraps a per-tab action: run it, then re-read that tab.
+// Run an action on a tab, then re-read that tab.
+async function runOn(tab, fn, settleMs = 0) {
+  await fn();
+  if (settleMs) await new Promise((r) => setTimeout(r, settleMs));
+  await refreshTab(tab.id);
+}
+
+// Click handler for a row button; ignores repeat clicks while the action runs.
+// (Not `disabled`, which would drop keyboard focus.)
 function act(tab, fn, settleMs = 0) {
   return async (e) => {
     const button = e.currentTarget;
-    button.disabled = true;
-    await fn();
-    if (settleMs) await new Promise((r) => setTimeout(r, settleMs));
-    await refreshTab(tab.id);
-    button.disabled = false; // in case nothing changed and the row wasn't re-rendered
+    if (button.dataset.busy) return;
+    button.dataset.busy = '1';
+    try {
+      await runOn(tab, fn, settleMs);
+    } finally {
+      delete button.dataset.busy;
+    }
   };
 }
 
@@ -375,6 +588,16 @@ async function setMutedSites(mutedSites) {
   settings.mutedSites = mutedSites;
   render();
   await saveSettings({ mutedSites }); // the background worker applies the change to open tabs
+}
+
+// 100% is the default, so saving it just forgets the site.
+async function saveSiteVolume(site, volume) {
+  const siteVolumes = { ...settings.siteVolumes };
+  if (Math.round(volume * 100) === 100) delete siteVolumes[site];
+  else siteVolumes[site] = volume;
+  settings.siteVolumes = siteVolumes;
+  render();
+  await saveSettings({ siteVolumes });
 }
 
 const soundTabs = () => tabs.filter((t) => t.audible || hasMedia(t));
@@ -401,6 +624,23 @@ ui.muteAll.addEventListener('click', async () => {
   scheduleRefresh(700);
 });
 
+function applyTheme(theme) {
+  const root = document.documentElement;
+  if (theme === 'light' || theme === 'dark') root.dataset.theme = theme;
+  else delete root.dataset.theme; // follow the system
+  try {
+    localStorage.setItem('theme', theme); // read by theme.js before the next first paint
+  } catch {}
+}
+
+for (const radio of document.querySelectorAll('input[name="theme"]')) {
+  radio.addEventListener('change', async () => {
+    settings.theme = radio.value;
+    applyTheme(settings.theme);
+    await saveSettings({ theme: settings.theme });
+  });
+}
+
 ui.showAll.addEventListener('change', async () => {
   settings.showAll = ui.showAll.checked;
   render();
@@ -421,7 +661,7 @@ ui.addSite.addEventListener('submit', (e) => {
 });
 ui.addSite.elements.site.addEventListener('input', (e) => e.target.setCustomValidity(''));
 
-// ---- Search ----
+// ---- Search & keyboard ----
 
 ui.search.addEventListener('input', () => {
   query = ui.search.value.trim().toLowerCase();
@@ -429,11 +669,40 @@ ui.search.addEventListener('input', () => {
   $('main').scrollTop = 0;
 });
 
-// Enter jumps to the first result.
 ui.search.addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter') return;
-  const [first] = visibleTabs();
-  if (first) goTo(first);
+  if (e.key === 'Enter') {
+    const [first] = visibleTabs();
+    if (first) goTo(first);
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    $('.tab .open', ui.list)?.focus();
+  } else if (e.key === 'Escape' && ui.search.value) {
+    e.preventDefault(); // clear the search instead of closing the popup
+    ui.search.value = '';
+    ui.search.dispatchEvent(new Event('input'));
+  }
+});
+
+// ↑/↓ move between rows, Space plays/pauses, M mutes, Enter opens (the row's own button).
+ui.list.addEventListener('keydown', (e) => {
+  const row = e.target.closest('.tab');
+  const tab = row && tabs.find((t) => t.id === Number(row.dataset.tabId));
+  if (!tab || e.metaKey || e.ctrlKey || e.altKey) return;
+  const onSlider = e.target.type === 'range';
+
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !onSlider) {
+    e.preventDefault();
+    const rows = [...ui.list.querySelectorAll('.tab')];
+    const next = rows[rows.indexOf(row) + (e.key === 'ArrowDown' ? 1 : -1)];
+    if (next) $('.open', next).focus();
+    else if (e.key === 'ArrowUp') ui.search.focus();
+  } else if (e.key === ' ' && e.target.classList.contains('open')) {
+    e.preventDefault(); // Space would otherwise "click" the row and switch tabs
+    if (hasMedia(tab) && siteOf(tab.url) !== 'meet.google.com') runOn(tab, () => togglePlay(tab.id));
+  } else if (e.key === 'm' || e.key === 'M') {
+    e.preventDefault();
+    runOn(tab, () => setTabMuted(tab.id, !isMuted(tab)));
+  }
 });
 
 // ---- Views ----
@@ -505,6 +774,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     for (const [key, { newValue }] of Object.entries(changes)) {
       if (key in DEFAULT_SETTINGS) settings[key] = newValue ?? DEFAULT_SETTINGS[key];
     }
+    if (changes.theme) applyTheme(settings.theme);
     render();
   }
   if (area === 'session' && changes.muteReasons) {
@@ -517,5 +787,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
 setInterval(() => !dragging && refresh(), 2500);
 
 settings = await getSettings();
+applyTheme(settings.theme);
 renderShortcuts();
 refresh();

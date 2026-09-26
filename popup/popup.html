@@ -4,13 +4,14 @@
     <meta charset="utf-8" />
     <title>Audio Control</title>
     <link rel="stylesheet" href="popup.css" />
+    <script src="theme.js"></script>
   </head>
   <body>
     <header class="top">
       <button type="button" id="back" class="icon-btn" title="Back to tabs" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
       </button>
-      <img class="logo" src="../icons/icon32.png" alt="" width="28" height="28" />
+      <img class="logo" src="../icons/icon128.png" alt="" width="28" height="28" />
       <div class="heading">
         <h1 id="viewTitle">Audio Control</h1>
         <p id="summary">Scanning tabs…</p>
@@ -36,7 +37,15 @@
     </div>
 
     <div id="settingsView" class="view settings" hidden>
-      <section>
+      <section class="rows">
+        <div class="setting-row">
+          <strong id="themeLabel">Theme</strong>
+          <div class="theme-choice" role="radiogroup" aria-labelledby="themeLabel">
+            <label><input type="radio" name="theme" value="system" />System</label>
+            <label><input type="radio" name="theme" value="light" />Light</label>
+            <label><input type="radio" name="theme" value="dark" />Dark</label>
+          </div>
+        </div>
         <label class="toggle">
           <span>
             <strong>Show all tabs</strong>
@@ -57,7 +66,21 @@
       </section>
 
       <section>
+        <h2>Site volumes <span id="volumeCount" class="count"></span></h2>
+        <p class="hint">Set with a tab's volume slider. Applied whenever the site starts playing.</p>
+        <ul id="volumeList" class="plain-list"></ul>
+      </section>
+
+      <section>
         <h2>Keyboard shortcuts</h2>
+        <h3>In this popup</h3>
+        <ul class="plain-list">
+          <li><span>Move between tabs</span><kbd>↑ ↓</kbd></li>
+          <li><span>Play / pause</span><kbd>Space</kbd></li>
+          <li><span>Mute / unmute</span><kbd>M</kbd></li>
+          <li><span>Go to tab</span><kbd>Enter</kbd></li>
+        </ul>
+        <h3>Anywhere in Chrome</h3>
         <ul id="keyList" class="plain-list"></ul>
         <button type="button" id="editKeys" class="link">Change shortcuts</button>
       </section>
@@ -70,28 +93,31 @@
             <img class="fav" alt="" width="18" height="18" />
             <span class="text">
               <span class="title"></span>
-              <span class="meta"></span>
+              <span class="meta">
+                <span class="bars" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="status"></span>
+              </span>
             </span>
           </button>
           <div class="ctrls">
-            <button class="icon-btn" data-act="back" title="Back 10 seconds"></button>
+            <button class="icon-btn" data-act="meet-mic"></button>
+            <button class="icon-btn" data-act="meet-cam"></button>
             <button class="icon-btn" data-act="play"></button>
-            <button class="icon-btn" data-act="fwd" title="Forward 10 seconds"></button>
             <button class="icon-btn" data-act="mute"></button>
+            <button class="icon-btn" data-act="menu" title="More" aria-haspopup="menu"></button>
           </div>
         </div>
         <div class="more">
-          <label class="vol" title="Page volume">
+          <label class="vol">
             <input type="range" min="0" max="100" step="5" aria-label="Volume" />
+            <span class="saved" hidden></span>
             <output></output>
           </label>
-          <button class="chip" data-act="meet-mic"></button>
-          <button class="chip" data-act="meet-cam"></button>
-          <button class="chip" data-act="rate" title="Playback speed"></button>
-          <button class="chip" data-act="rule"></button>
         </div>
       </li>
     </template>
+
+    <div id="menu" class="menu" popover role="menu" aria-label="Tab actions"></div>
 
     <script type="module" src="popup.js"></script>
   </body>
