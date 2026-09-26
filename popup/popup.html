@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Audio Control</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="top">
+      <button type="button" id="back" class="icon-btn" title="Back to tabs" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      </button>
+      <img class="logo" src="../icons/icon32.png" alt="" width="28" height="28" />
+      <div class="heading">
+        <h1 id="viewTitle">Audio Control</h1>
+        <p id="summary">Scanning tabs…</p>
+      </div>
+      <button type="button" id="muteAll" class="pill" hidden></button>
+      <button type="button" id="openSettings" class="icon-btn" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+    </header>
+
+    <div id="listView" class="view">
+      <label class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" id="search" placeholder="Search tabs" aria-label="Search tabs" autocomplete="off" spellcheck="false" autofocus />
+      </label>
+      <main>
+        <ul id="tabs"></ul>
+        <div id="empty" class="empty" hidden>
+          <strong id="emptyTitle">Nothing is playing</strong>
+          <span id="emptyText">Tabs with sound, video or audio will show up here.</span>
+        </div>
+      </main>
+    </div>
+
+    <div id="settingsView" class="view settings" hidden>
+      <section>
+        <label class="toggle">
+          <span>
+            <strong>Show all tabs</strong>
+            <small>Off: list only tabs with sound, video or audio</small>
+          </span>
+          <input type="checkbox" id="showAll" role="switch" />
+        </label>
+      </section>
+
+      <section>
+        <h2>Always-muted sites <span id="siteCount" class="count"></span></h2>
+        <p class="hint">These sites start muted in every tab, including subdomains.</p>
+        <form id="addSite">
+          <input name="site" placeholder="e.g. twitter.com" autocomplete="off" spellcheck="false" />
+          <button type="submit">Add</button>
+        </form>
+        <ul id="siteList" class="plain-list"></ul>
+      </section>
+
+      <section>
+        <h2>Keyboard shortcuts</h2>
+        <ul id="keyList" class="plain-list"></ul>
+        <button type="button" id="editKeys" class="link">Change shortcuts</button>
+      </section>
+    </div>
+
+    <template id="tab-tpl">
+      <li class="tab">
+        <div class="head">
+          <button class="open" title="Go to tab">
+            <img class="fav" alt="" width="18" height="18" />
+            <span class="text">
+              <span class="title"></span>
+              <span class="meta"></span>
+            </span>
+          </button>
+          <div class="ctrls">
+            <button class="icon-btn" data-act="back" title="Back 10 seconds"></button>
+            <button class="icon-btn" data-act="play"></button>
+            <button class="icon-btn" data-act="fwd" title="Forward 10 seconds"></button>
+            <button class="icon-btn" data-act="mute"></button>
+          </div>
+        </div>
+        <div class="more">
+          <label class="vol" title="Page volume">
+            <input type="range" min="0" max="100" step="5" aria-label="Volume" />
+            <output></output>
+          </label>
+          <button class="chip" data-act="meet-mic"></button>
+          <button class="chip" data-act="meet-cam"></button>
+          <button class="chip" data-act="rate" title="Playback speed"></button>
+          <button class="chip" data-act="rule"></button>
+        </div>
+      </li>
+    </template>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

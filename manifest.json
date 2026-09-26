@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "Audio Control",
+  "version": "1.0.0",
+  "description": "See every tab making sound. Mute, pause, change volume and speed, auto-mute sites, and keep background tabs quiet.",
+  "permissions": ["tabs", "scripting", "storage", "favicon"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Audio Control",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "commands": {
+    "toggle-mute-tab": {
+      "suggested_key": { "default": "Alt+Shift+M" },
+      "description": "Mute / unmute the current tab"
+    },
+    "toggle-play": {
+      "suggested_key": { "default": "Alt+Shift+P" },
+      "description": "Play / pause the last tab that played sound"
+    },
+    "mute-other-tabs": {
+      "suggested_key": { "default": "Alt+Shift+O" },
+      "description": "Mute every tab except the current one"
+    },
+    "toggle-mute-all": {
+      "suggested_key": { "default": "Alt+Shift+A" },
+      "description": "Mute / unmute all tabs with sound"
+    }
+  }
+}
